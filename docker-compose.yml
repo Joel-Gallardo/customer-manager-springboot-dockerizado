@@ -1,0 +1,58 @@
+# El docker-compose.yml genera una imagen de Docker para tu aplicación Spring Boot
+# y la ejecuta en un contenedor, mapeando el puerto 8080 del contenedor al puerto 8080 del host.
+# Asegúrate de tener un Dockerfile en la carpeta customermanager que defina cómo construir la imagen de tu aplicación.
+# Este archivo también puede incluir un servicio de base de datos SQL Server si lo necesitas.
+# version: "3.8" # Versión del formato de Docker Compose
+
+services: # Definición de los servicios que componen la aplicación (cada servicio se ejecuta en un contenedor separado)
+  customermanager: # Nombre del servicio de la aplicación Spring Boot
+    build: # Configuración de la construcción de la imagen del servicio, Define cómo construir la imagen del servicio
+      context: ./customermanager # Contexto de construcción, donde se encuentra el Dockerfile y el código fuente
+      dockerfile: Dockerfile # Nombre del Dockerfile a usar para construir la imagen
+    # mem_limit: 512m  # Limita la memoria del contenedor a 512 MB
+
+    # Mapea el puerto de Spring Boot 8080 al host 8080
+    ports:
+      - "8080:8080"
+
+    # Conecta al servicio 'dbcustomermanager' en la red interna de Compose este es un servicio de base de datos SQL Server creado en el mismo archivo docker-compose.yml
+    environment:
+      SPRING_DATASOURCE_URL: "jdbc:sqlserver://dbcustomermanager:1433;databaseName=Dev;encrypt=false;trustServerCertificate=true"
+      SPRING_DATASOURCE_USERNAME: "sa"
+      SPRING_DATASOURCE_PASSWORD: "Password123!"
+
+    # Reinicia el contenedor si falla o al arrancar el daemon
+    restart: always
+
+    # Configura el contenedor para que dependa del servicio de base de datos
+    # Esto asegura que el servicio de base de datos esté saludable antes de iniciar la aplicación
+    depends_on:
+      dbcustomermanager:
+        condition: service_healthy # Asegura que el servicio de base de datos esté saludable antes de iniciar
+
+  # Servicio de base de datos SQL Server
+  # Este servicio utiliza una imagen oficial de SQL Server y configura el contenedor para que esté listo para aceptar conexiones
+  # Asegúrate de que la versión de SQL Server sea compatible con tu aplicación(la versión debe coincidir con la del pom.xml)
+  dbcustomermanager: # Nombre del servicio de base de datos
+    build: # Configuración de la construcción de la imagen del servicio de base de datos, Define cómo construir la imagen del servicio de base de datos
+        context: . # Contexto de construcción, donde se encuentra el Dockerfile.database, el punto (.) es una abreviatura para "el directorio actual", que es la carpeta raíz donde se encuentra docker-compose.yml
+        dockerfile: Dockerfile.database # Imagen de SQL Server(asegurarse de que la version de sql que elijas sea compatible con la versión del JDBC driver (mssql‑jdbc) del pom.xml)
+    ports:
+      - "1433:1433" # Mapea el puerto 1433 del contenedor al puerto 1433 del host, que es el puerto por defecto de SQL Server
+    # Configura las variables de entorno necesarias para SQL Server
+    environment:
+      ACCEPT_EULA: "Y" # Acepta el EULA de Microsoft SQL Server
+      SA_PASSWORD: "Password123!"
+    volumes:
+      - db_data:/var/opt/mssql # Monta un volumen persistente para los datos de la base de datos
+    # Reinicia el contenedor si falla o al arrancar el daemon
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P $${SA_PASSWORD} -Q \"SELECT 1\""]
+      start_period: 120s  # Tiempo de espera inicial para que el servicio esté listo antes de realizar la comprobación de salud
+      interval: 15s      # Intervalo entre comprobaciones de salud
+      timeout: 10s       # Tiempo máximo para que la comprobación de salud responda
+      retries: 10         # Número de intentos antes de considerar el servicio como no saludable
+
+volumes:
+  db_data: # Define un volumen persistente para los datos de la base de datos, asegurando que los datos no se pierdan al reiniciar el contenedor

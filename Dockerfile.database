@@ -1,0 +1,26 @@
+# Dockerfile.database
+
+# 1. Empezamos con la imagen oficial de SQL Server
+FROM mcr.microsoft.com/mssql/server:2022-CU17-ubuntu-20.04
+
+# 2. Instalamos las herramientas (como hicimos antes)
+USER root
+RUN apt-get update && apt-get install -y curl gnupg && \
+    curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - && \
+    curl https://packages.microsoft.com/config/ubuntu/20.04/prod.list > /etc/apt/sources.list.d/msprod.list && \
+    apt-get update && \
+    ACCEPT_EULA=Y apt-get install -y mssql-tools unixodbc-dev
+
+# 3. Creamos un directorio de trabajo y copiamos nuestros scripts
+WORKDIR /usr/src/app
+COPY ./db-init/init.sql .
+COPY ./db-init/run-initialization.sh .
+
+# 4. Damos permisos de ejecución a nuestro script
+RUN chmod +x run-initialization.sh
+
+# 5. Volvemos al usuario mssql
+USER mssql
+
+# 6. Establecemos nuestro script como el comando de entrada del contenedor
+CMD ["/bin/bash", "./run-initialization.sh"]
